@@ -1,0 +1,20 @@
+[package]
+name = "water-reminder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+slint = "1.8"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+notify-rust = "4.11.7"
+dirs = "5.0"
+
+[build-dependencies]
+slint-build = "1.8"
+
+[[bin]]
+name = "water-reminder"
+path = "src/main.rs"

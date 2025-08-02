@@ -1,0 +1,916 @@
+import { Button, VerticalBox, HorizontalBox, ScrollView, LineEdit } from "std-widgets.slint";
+
+// ================================
+// 数据结构定义
+// ================================
+
+export struct WaterRecord {
+    id: int,
+    amount: int,
+    time: string,
+}
+
+// ================================
+// 全局状态管理
+// ================================
+
+export global AppState {
+    in-out property <int> daily-goal: 2000;
+    in-out property <int> total-today: 0;
+    in-out property <float> progress-percentage: 0.0;
+    in-out property <[WaterRecord]> today-records: [];
+    in-out property <int> current-page: 0; // 0=主页, 1=统计, 2=设置
+    in-out property <bool> reminder-enabled: true;
+    in-out property <int> reminder-interval: 60;
+    in-out property <bool> show-custom-input: false;
+    in-out property <string> custom-amount: "";
+    
+    // 统计数据
+    in-out property <int> weekly-average: 0;
+    in-out property <int> streak-days: 0;
+    in-out property <int> max-daily: 0;
+    in-out property <int> total-week: 0;
+    in-out property <[int]> seven-days-data: [0, 0, 0, 0, 0, 0, 0]; // 7天的饮水数据，最后一个是今天
+    
+    callback add-water(int);
+    callback undo-last-record();
+    callback set-daily-goal(int);
+    callback toggle-reminder(bool);
+    callback set-reminder-interval(int);
+    callback switch-page(int);
+    callback show-custom-input-dialog();
+    callback hide-custom-input-dialog();
+    callback add-custom-water();
+}
+
+// ================================
+// 通用组件
+// ================================
+
+component WaterButton inherits Rectangle {
+    in property <int> amount;
+    
+    width: 90px;
+    height: 60px;
+    background: #3498db;
+    border-radius: 12px;
+    drop-shadow-color: #00000015;
+    drop-shadow-blur: 5px;
+    drop-shadow-offset-y: 2px;
+    
+    TouchArea {
+        clicked => { AppState.add-water(root.amount); }
+    }
+    
+    VerticalBox {
+        alignment: center;
+        
+        Text {
+            text: root.amount + " ml";
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+    }
+    
+    states [
+        pressed when self.pressed: {
+            background: #2980b9;
+        }
+    ]
+    
+    property <bool> pressed: false;
+    
+    animate background { duration: 150ms; }
+}
+
+component AchievementBadge inherits Rectangle {
+    in property <string> icon;
+    in property <string> title;
+    in property <string> description;
+    
+    width: 130px;
+    height: 100px;
+    background: #f8f9fa;
+    border-radius: 15px;
+    border-width: 2px;
+    border-color: #e9ecef;
+    
+    VerticalBox {
+        alignment: center;
+        spacing: 5px;
+        
+        Text {
+            text: root.icon;
+            font-size: 24px;
+        }
+        
+        Text {
+            text: root.title;
+            font-size: 12px;
+            font-weight: 600;
+            color: #2c3e50;
+            horizontal-alignment: center;
+        }
+        
+        Text {
+            text: root.description;
+            font-size: 10px;
+            color: #6c757d;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+component SettingGroup inherits VerticalBox {
+    in property <string> title;
+    
+    spacing: 10px;
+    
+    Text {
+        text: root.title;
+        font-size: 16px;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    Rectangle {
+        background: white;
+        border-width: 1px;
+        border-color: #e9ecef;
+        border-radius: 10px;
+        padding: 15px;
+        
+        @children
+    }
+}
+
+// ================================
+// 导航组件
+// ================================
+
+component NavButton inherits Rectangle {
+    in property <string> text;
+    in property <int> page-index;
+    in property <bool> active;
+    
+    callback clicked;
+    
+    background: active ? #34495e : transparent;
+    border-radius: 0;
+    
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+    
+    Text {
+        text: root.text;
+        color: white;
+        font-size: 14px;
+        font-weight: active ? 700 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component NavBar inherits Rectangle {
+    height: 60px;
+    background: #2c3e50;
+    
+    HorizontalBox {
+        alignment: stretch;
+        spacing: 0;
+        
+        NavButton {
+            text: "主页";
+            page-index: 0;
+            active: AppState.current-page == 0;
+            clicked => { AppState.switch-page(0); }
+        }
+        
+        NavButton {
+            text: "统计";
+            page-index: 1;
+            active: AppState.current-page == 1;
+            clicked => { AppState.switch-page(1); }
+        }
+        
+        NavButton {
+            text: "设置";
+            page-index: 2;
+            active: AppState.current-page == 2;
+            clicked => { AppState.switch-page(2); }
+        }
+    }
+}
+
+// ================================
+// 主页组件
+// ================================
+
+component HomePage inherits ScrollView {
+    VerticalBox {
+        spacing: 20px;
+        padding: 20px;
+    
+    // 今日进度卡片
+    Rectangle {
+        height: 160px;
+        background: #667eea;
+        border-radius: 15px;
+        drop-shadow-color: #00000020;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 2px;
+        
+        VerticalBox {
+            alignment: center;
+            spacing: 15px;
+            
+            Text {
+                text: "今日饮水量";
+                color: white;
+                font-size: 18px;
+                font-weight: 600;
+            }
+            
+            Text {
+                text: AppState.total-today + " / " + AppState.daily-goal + " ml";
+                color: white;
+                font-size: 24px;
+                font-weight: 700;
+            }
+            
+            Rectangle {
+                height: 8px;
+                width: 80%;
+                background: #ffffff30;
+                border-radius: 4px;
+                
+                Rectangle {
+                    width: parent.width * AppState.progress-percentage / 100;
+                    height: parent.height;
+                    background: #4CAF50;
+                    border-radius: parent.border-radius;
+                    x: 0;
+                    y: 0;
+                }
+            }
+            
+            Text {
+                text: Math.round(AppState.progress-percentage) + "%";
+                color: white;
+                font-size: 16px;
+                font-weight: 500;
+            }
+        }
+    }
+    
+    // 快速添加按钮
+    Text {
+        text: "快速添加";
+        font-size: 16px;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    VerticalBox {
+        spacing: 0px;
+        
+        HorizontalBox {
+            alignment: space-between;
+            WaterButton { amount: 50; }
+            WaterButton { amount: 100; }
+            WaterButton { amount: 200; }
+        }
+        
+        HorizontalBox {
+            alignment: space-between;
+            WaterButton { amount: 300; }
+            WaterButton { amount: 400; }
+            WaterButton { amount: 500; }
+        }
+    }
+    
+    // 自定义输入区域
+    HorizontalBox {
+        spacing: 10px;
+        alignment: center;
+        
+        Button {
+            text: "自定义量";
+            primary: true;
+            clicked => {
+                AppState.show-custom-input-dialog();
+            }
+        }
+        
+        Button {
+            text: "撤销";
+            clicked => { AppState.undo-last-record(); }
+        }
+    }
+    
+    // 今日记录
+    if AppState.today-records.length > 0: VerticalBox {
+        spacing: 10px;
+        
+        Text {
+            text: "今日记录";
+            font-size: 16px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        ScrollView {
+            height: 150px;
+            
+            VerticalBox {
+                spacing: 5px;
+                
+                for record in AppState.today-records: Rectangle {
+                    height: 40px;
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                    
+                    HorizontalBox {
+                        padding: 10px;
+                        alignment: space-between;
+                        
+                        Text {
+                            text: record.amount + " ml";
+                            font-size: 14px;
+                            color: #2c3e50;
+                        }
+                        
+                        Text {
+                            text: record.time;
+                            font-size: 12px;
+                            color: #6c757d;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    }
+}
+
+// ================================
+// 统计页面组件
+// ================================
+
+component StatsPage inherits ScrollView {
+    VerticalBox {
+        spacing: 20px;
+        padding: 20px;
+    
+    // 今日统计卡片
+    Rectangle {
+        height: 120px;
+        background: #667eea;
+        border-radius: 15px;
+        drop-shadow-color: #00000020;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 2px;
+        
+        VerticalBox {
+            alignment: center;
+            spacing: 8px;
+            
+            Text {
+                text: "今日进度";
+                color: white;
+                font-size: 16px;
+                font-weight: 600;
+            }
+            
+            Text {
+                text: AppState.total-today + " / " + AppState.daily-goal + " ml";
+                color: white;
+                font-size: 20px;
+                font-weight: 700;
+            }
+            
+            Text {
+                text: Math.round(AppState.progress-percentage) + "% 完成";
+                color: white;
+                font-size: 14px;
+            }
+        }
+    }
+    
+    // 周统计卡片
+    Rectangle {
+        height: 160px;
+        background: #f093fb;
+        border-radius: 15px;
+        drop-shadow-color: #00000020;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 2px;
+        
+        VerticalBox {
+            alignment: center;
+            spacing: 5px;
+            
+            Text {
+                text: "本周统计";
+                color: white;
+                font-size: 16px;
+                font-weight: 600;
+            }
+            
+            HorizontalBox {
+                spacing: 30px;
+                alignment: center;
+                
+                VerticalBox {
+                    alignment: center;
+                    spacing: 5px;
+                    
+                    Text {
+                        text: AppState.weekly-average + " ml";
+                        color: white;
+                        font-size: 18px;
+                        font-weight: 700;
+                    }
+                    
+                    Text {
+                        text: "日均饮水";
+                        color: white;
+                        font-size: 12px;
+                    }
+                }
+                
+                VerticalBox {
+                    alignment: center;
+                    spacing: 5px;
+                    
+                    Text {
+                        text: AppState.total-week + " ml";
+                        color: white;
+                        font-size: 18px;
+                        font-weight: 700;
+                    }
+                    
+                    Text {
+                        text: "本周总量";
+                        color: white;
+                        font-size: 12px;
+                    }
+                }
+            }
+            
+            Text {
+                text: "连续达标: " + AppState.streak-days + " 天";
+                color: white;
+                font-size: 14px;
+            }
+        }
+    }
+    
+    // 个人记录卡片
+    Rectangle {
+        height: 120px;
+        background: #4ecdc4;
+        border-radius: 15px;
+        drop-shadow-color: #00000020;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 2px;
+        
+        VerticalBox {
+            alignment: center;
+            spacing: 10px;
+            
+            Text {
+                text: "个人记录";
+                color: white;
+                font-size: 16px;
+                font-weight: 600;
+            }
+            
+            Text {
+                text: AppState.max-daily + " ml";
+                color: white;
+                font-size: 22px;
+                font-weight: 700;
+            }
+            
+            Text {
+                text: "单日最高饮水量";
+                color: white;
+                font-size: 14px;
+            }
+        }
+    }
+    
+    // 简化的7天趋势
+    Rectangle {
+        height: 215px; // 增加高度以容纳更高的柱状图
+        background: white;
+        border-width: 2px;
+        border-color: #e9ecef;
+        border-radius: 15px;
+        
+        VerticalBox {
+            padding: 15px;
+            spacing: 15px;
+            
+            Text {
+                text: "📊 近7天饮水趋势";
+                font-size: 16px;
+                font-weight: 600;
+                color: #2c3e50;
+                horizontal-alignment: center;
+            }
+            
+            HorizontalBox {
+                spacing: 8px;
+                alignment: center;
+                
+                for i in [0, 1, 2, 3, 4, 5, 6]: Rectangle {
+                    width: 35px;
+                    height: 100px; // 增加高度以容纳文字
+                    background: #f8f9fa;
+                    border-radius: 5px;
+                    border-width: 1px;
+                    border-color: #e9ecef;
+                    
+                    VerticalBox {
+                        alignment: end;
+                        padding: 3px;
+                        spacing: 2px;
+                        
+                        Rectangle {
+                            width: parent.width - 6px;
+                            height: AppState.seven-days-data[i] > 0 ? Math.max(5px, AppState.seven-days-data[i] * 70px / AppState.daily-goal) : 5px; // 调整最大高度
+                            background: i == 6 ? #667eea : (AppState.seven-days-data[i] >= AppState.daily-goal ? #4CAF50 : #3498db);
+                            border-radius: 3px;
+                        }
+                        
+                        Text {
+                            text: {
+                                // 计算当前是星期几 (0=周日, 1=周一, ..., 6=周六)
+                                // 假设数组最后一位(索引6)是今天，前面6位是过去6天
+                                // 需要根据今天是星期几来动态显示标签
+                                if i == 6 {
+                                    "今"
+                                } else {
+                                    // 简化处理：显示相对天数
+                                    i == 0 ? "6天前" : i == 1 ? "5天前" : i == 2 ? "4天前" : 
+                                    i == 3 ? "3天前" : i == 4 ? "2天前" : "昨天"
+                                }
+                            };
+                            font-size: 9px;
+                            color: #6c757d;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+            
+            Text {
+                text: "\"今\"表示今日进度";
+                font-size: 12px;
+                color: #6c757d;
+                horizontal-alignment: center;
+            }
+        }
+    }
+    
+    // 成就区域
+    Text {
+        text: "成就徽章";
+        font-size: 16px;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    VerticalBox {
+        spacing: 10px;
+        
+        HorizontalBox {
+            spacing: 15px;
+            alignment: center;
+            
+            AchievementBadge {
+                icon: AppState.streak-days >= 7 ? "🏆" : "🥉";
+                title: "坚持达人";
+                description: AppState.streak-days >= 7 ? "连续" + AppState.streak-days + "天达标" : "继续努力";
+            }
+            
+            AchievementBadge {
+                icon: AppState.max-daily >= 3000 ? "💧" : "🚰";
+                title: "水分大师";
+                description: AppState.max-daily >= 3000 ? "单日" + AppState.max-daily + "ml" : "单日" + AppState.max-daily + "ml";
+            }
+        }
+        
+        HorizontalBox {
+            spacing: 15px;
+            alignment: center;
+            
+            AchievementBadge {
+                icon: AppState.total-week >= 14000 ? "⭐" : "🌟";
+                title: "周目标王";
+                description: AppState.total-week >= 14000 ? "本周" + AppState.total-week + "ml" : "本周" + AppState.total-week + "ml";
+            }
+            
+            AchievementBadge {
+                icon: AppState.progress-percentage >= 100 ? "✅" : "📈";
+                title: "今日完成";
+                description: AppState.progress-percentage >= 100 ? "今日已达标" : Math.round(AppState.progress-percentage) + "% 完成";
+            }
+        }
+    }
+    }
+}
+
+// ================================
+// 设置页面组件
+// ================================
+
+component SettingsPage inherits VerticalBox {
+    spacing: 20px;
+    padding: 20px;
+    
+    // 每日目标设置
+    SettingGroup {
+        title: "每日目标";
+        
+        HorizontalBox {
+            spacing: 10px;
+            alignment: space-between;
+            
+            Text {
+                text: "目标水量:";
+                font-size: 14px;
+                color: #2c3e50;
+                vertical-alignment: center;
+            }
+            
+            HorizontalBox {
+                spacing: 5px;
+                
+                Button {
+                    text: "-";
+                    width: 30px;
+                    height: 30px;
+                    clicked => {
+                        if AppState.daily-goal > 1000 {
+                            AppState.set-daily-goal(AppState.daily-goal - 100);
+                        }
+                    }
+                }
+                
+                Text {
+                    text: AppState.daily-goal + " ml";
+                    font-size: 14px;
+                    color: #2c3e50;
+                    width: 80px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                
+                Button {
+                    text: "+";
+                    width: 30px;
+                    height: 30px;
+                    clicked => {
+                        if AppState.daily-goal < 5000 {
+                            AppState.set-daily-goal(AppState.daily-goal + 100);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 提醒设置
+    SettingGroup {
+        title: "提醒设置";
+        
+        VerticalBox {
+            spacing: 15px;
+            
+            HorizontalBox {
+                spacing: 10px;
+                alignment: space-between;
+                
+                Text {
+                    text: "启用提醒:";
+                    font-size: 14px;
+                    color: #2c3e50;
+                    vertical-alignment: center;
+                }
+                
+                Button {
+                    text: AppState.reminder-enabled ? "开启" : "关闭";
+                    primary: AppState.reminder-enabled;
+                    clicked => {
+                        AppState.toggle-reminder(!AppState.reminder-enabled);
+                    }
+                }
+            }
+            
+            if AppState.reminder-enabled: HorizontalBox {
+                spacing: 10px;
+                alignment: space-between;
+                
+                Text {
+                    text: "提醒间隔:";
+                    font-size: 14px;
+                    color: #2c3e50;
+                    vertical-alignment: center;
+                }
+                
+                HorizontalBox {
+                    spacing: 5px;
+                    
+                    Button {
+                        text: "-";
+                        width: 30px;
+                        height: 30px;
+                        clicked => {
+                            if AppState.reminder-interval > 5 {
+                                AppState.set-reminder-interval(AppState.reminder-interval - 5);
+                            }
+                        }
+                    }
+                    
+                    Text {
+                        text: AppState.reminder-interval + " 分钟";
+                        font-size: 14px;
+                        color: #2c3e50;
+                        width: 80px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    
+                    Button {
+                        text: "+";
+                        width: 30px;
+                        height: 30px;
+                        clicked => {
+                            if AppState.reminder-interval < 120 {
+                                AppState.set-reminder-interval(AppState.reminder-interval + 5);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 关于信息
+    SettingGroup {
+        title: "关于";
+        
+        VerticalBox {
+            spacing: 10px;
+            
+            Text {
+                text: "💧 Water Reminder v0.1.0";
+                font-size: 14px;
+                color: #2c3e50;
+                horizontal-alignment: center;
+            }
+            
+            Text {
+                text: "跨平台桌面饮水提醒应用";
+                font-size: 12px;
+                color: #6c757d;
+                horizontal-alignment: center;
+            }
+            
+            Text {
+                text: "支持 Linux • Windows • macOS 原生通知";
+                font-size: 12px;
+                color: #6c757d;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+// ================================
+// 对话框组件
+// ================================
+
+component CustomInputDialog inherits Rectangle {
+    // 全屏遮罩
+    width: 100%;
+    height: 100%;
+    background: #00000060;
+    
+    // 点击遮罩关闭对话框
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            AppState.hide-custom-input-dialog();
+        }
+    }
+    
+    // 居中对话框
+    Rectangle {
+        width: 300px;
+        height: 200px;
+        background: white;
+        border-radius: 15px;
+        drop-shadow-color: #00000030;
+        drop-shadow-blur: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        
+        // 阻止点击对话框内容区域时关闭对话框
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => { }
+        }
+        
+        VerticalBox {
+            padding: 20px;
+            spacing: 15px;
+            alignment: center;
+            
+            Text {
+                text: "请输入饮水量 (ml)";
+                font-size: 16px;
+                font-weight: 600;
+                color: #2c3e50;
+                horizontal-alignment: center;
+            }
+            
+            LineEdit {
+                height: 40px;
+                text: AppState.custom-amount;
+                placeholder-text: "例如: 250";
+                font-size: 16px;
+                input-type: number;
+                edited(text) => {
+                    AppState.custom-amount = text;
+                }
+            }
+            
+            HorizontalBox {
+                spacing: 15px;
+                alignment: center;
+                
+                Button {
+                    text: "取消";
+                    width: 80px;
+                    clicked => {
+                        AppState.hide-custom-input-dialog();
+                    }
+                }
+                
+                Button {
+                    text: "确定";
+                    primary: true;
+                    width: 80px;
+                    clicked => {
+                        AppState.add-custom-water();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ================================
+// 主应用窗口
+// ================================
+
+export component AppWindow inherits Window {
+    title: "💧 Water Reminder - 喝水提醒";
+    width: 400px;
+    height: 600px;
+    
+    VerticalBox {
+        spacing: 0;
+        
+        NavBar {}
+        
+        // 页面内容区域 - 使用Rectangle作为容器来叠加页面
+        Rectangle {
+            // 预加载所有页面，通过可见性控制显示
+            HomePage {
+                visible: AppState.current-page == 0;
+            }
+            
+            StatsPage {
+                visible: AppState.current-page == 1;
+            }
+            
+            SettingsPage {
+                visible: AppState.current-page == 2;
+            }
+        }
+    }
+    
+    // 自定义输入对话框
+    if AppState.show-custom-input: CustomInputDialog {}
+}
