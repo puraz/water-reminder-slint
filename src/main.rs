@@ -115,6 +115,22 @@ fn main() -> Result<(), slint::PlatformError> {
                 let records_model = Rc::new(VecModel::from(records));
                 ui.global::<AppState>().set_today_records(records_model.into());
                 
+                // 显示成功提示Toast
+                let progress = state.get_progress_percentage();
+                let (icon, message) = if state.today_stats.goal_achieved {
+                    ("🎉", format!("已喝水 {} ml！目标已达成", amount))
+                } else if progress >= 75.0 {
+                    ("💪", format!("已喝水 {} ml！距离目标很近了", amount))
+                } else if progress >= 50.0 {
+                    ("👍", format!("已喝水 {} ml！进度过半啦", amount))
+                } else {
+                    ("💧", format!("已喝水 {} ml！继续加油", amount))
+                };
+                
+                ui.global::<AppState>().set_toast_icon(icon.into());
+                ui.global::<AppState>().set_toast_message(message.into());
+                ui.global::<AppState>().set_show_success_toast(true);
+                
                 // 检查是否达成目标
                 if state.today_stats.goal_achieved && (state.today_stats.total_amount - amount as u32) < state.today_stats.goal_amount {
                     let _ = notification_manager_clone.show_goal_achieved();
@@ -299,6 +315,22 @@ fn main() -> Result<(), slint::PlatformError> {
                         let records_model = Rc::new(VecModel::from(records));
                         ui.global::<AppState>().set_today_records(records_model.into());
                         
+                        // 显示成功提示Toast
+                        let progress = state.get_progress_percentage();
+                        let (icon, message) = if state.today_stats.goal_achieved {
+                            ("🎉", format!("已喝水 {} ml！目标已达成", amount))
+                        } else if progress >= 75.0 {
+                            ("💪", format!("已喝水 {} ml！距离目标很近了", amount))
+                        } else if progress >= 50.0 {
+                            ("👍", format!("已喝水 {} ml！进度过半啦", amount))
+                        } else {
+                            ("💧", format!("已喝水 {} ml！继续加油", amount))
+                        };
+                        
+                        ui.global::<AppState>().set_toast_icon(icon.into());
+                        ui.global::<AppState>().set_toast_message(message.into());
+                        ui.global::<AppState>().set_show_success_toast(true);
+                        
                         // 检查是否达成目标
                         if state.today_stats.goal_achieved && (state.today_stats.total_amount - amount) < state.today_stats.goal_amount {
                             let _ = notification_manager_clone.show_goal_achieved();
@@ -312,6 +344,15 @@ fn main() -> Result<(), slint::PlatformError> {
                         ui.global::<AppState>().set_custom_amount("".into());
                     }
                 }
+            }
+        });
+    }
+    
+    {
+        let ui_weak = ui.as_weak();
+        ui.global::<AppState>().on_hide_success_toast(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.global::<AppState>().set_show_success_toast(false);
             }
         });
     }
