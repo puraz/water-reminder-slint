@@ -135,11 +135,212 @@ impl NotificationManager {
             }
         }
         
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "windows")]
         {
-            // Windows和macOS下的窗口激活
-            println!("在Windows/macOS下，窗口激活功能需要额外实现");
-            // 这里可以添加Windows/macOS特定的窗口激活代码
+            // Windows下的窗口激活
+            println!("Windows平台 - 尝试激活窗口...");
+            
+            unsafe {
+                use std::ffi::OsStr;
+                use std::os::windows::ffi::OsStrExt;
+                use winapi::um::winuser::{
+                    FindWindowW, SetForegroundWindow, ShowWindow, IsIconic, 
+                    SW_RESTORE, SW_SHOW, GetWindowTextW, EnumWindows
+                };
+                use winapi::shared::windef::HWND;
+                use winapi::shared::minwindef::{BOOL, LPARAM};
+                
+                let window_titles = [
+                    "💧 Water Reminder - 喝水提醒",
+                    "Water Reminder - 喝水提醒", 
+                    "Water Reminder",
+                    "water-reminder"
+                ];
+                
+                let mut window_found = false;
+                
+                // 1. 直接通过窗口标题查找
+                for title in &window_titles {
+                    let wide_title: Vec<u16> = OsStr::new(title)
+                        .encode_wide()
+                        .chain(std::iter::once(0))
+                        .collect();
+                    
+                    let hwnd = FindWindowW(std::ptr::null(), wide_title.as_ptr());
+                    
+                    if !hwnd.is_null() {
+                        println!("Windows: 找到窗口句柄，标题: '{}'", title);
+                        
+                        // 如果窗口最小化，先恢复
+                        if IsIconic(hwnd) != 0 {
+                            println!("Windows: 窗口已最小化，正在恢复...");
+                            ShowWindow(hwnd, SW_RESTORE);
+                        } else {
+                            ShowWindow(hwnd, SW_SHOW);
+                        }
+                        
+                        // 将窗口带到前台
+                        if SetForegroundWindow(hwnd) != 0 {
+                            println!("Windows: 成功激活窗口");
+                            window_found = true;
+                            break;
+                        } else {
+                            println!("Windows: 激活窗口失败");
+                        }
+                    }
+                }
+                
+                // 2. 如果直接查找失败，枚举所有窗口
+                if !window_found {
+                    println!("Windows: 直接查找失败，枚举所有窗口...");
+                    
+                    extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+                        unsafe {
+                            let mut window_text = [0u16; 256];
+                            let len = GetWindowTextW(hwnd, window_text.as_mut_ptr(), 256);
+                            
+                            if len > 0 {
+                                let title = String::from_utf16_lossy(&window_text[..len as usize]);
+                                if title.contains("Water Reminder") || title.contains("water-reminder") {
+                                    println!("Windows: 枚举找到匹配窗口: '{}'", title);
+                                    
+                                    // 恢复并激活窗口
+                                    if IsIconic(hwnd) != 0 {
+                                        ShowWindow(hwnd, SW_RESTORE);
+                                    } else {
+                                        ShowWindow(hwnd, SW_SHOW);
+                                    }
+                                    
+                                    if SetForegroundWindow(hwnd) != 0 {
+                                        println!("Windows: 通过枚举成功激活窗口");
+                                        return 0; // 停止枚举
+                                    }
+                                }
+                            }
+                            1 // 继续枚举
+                        }
+                    }
+                    
+                    EnumWindows(Some(enum_windows_proc), 0);
+                }
+                
+                if !window_found {
+                    println!("Windows: 所有窗口激活方法都失败了");
+                }
+            }
+        }
+        
+        #[cfg(target_os = "macos")]
+        {
+            // macOS下的窗口激活
+            println!("macOS平台 - 尝试激活窗口...");
+            
+            // 方法1: 使用AppleScript激活应用程序
+            let app_names = [
+                "Water Reminder",
+                "water-reminder"
+            ];
+            
+            let mut success = false;
+            
+            for app_name in &app_names {
+                let script = format!(
+                    r#"tell application "System Events"
+                        set appName to "{}"
+                        if exists (processes whose name is appName) then
+                            tell application appName to activate
+                            return true
+                        end if
+                        return false
+                    end tell"#, 
+                    app_name
+                );
+                
+                println!("macOS: 尝试使用AppleScript激活应用: '{}'", app_name);
+                
+                match std::process::Command::new("osascript")
+                    .arg("-e")
+                    .arg(&script)
+                    .output() {
+                    Ok(output) => {
+                        if output.status.success() {
+                            let result = String::from_utf8_lossy(&output.stdout).trim();
+                            if result == "true" {
+                                println!("macOS: AppleScript成功激活应用");
+                                success = true;
+                                break;
+                            }
+                        } else {
+                            println!("macOS: AppleScript执行失败: {}", String::from_utf8_lossy(&output.stderr));
+                        }
+                    },
+                    Err(e) => {
+                        println!("macOS: 无法执行osascript: {}", e);
+                        break;
+                    }
+                }
+            }
+            
+            // 方法2: 如果AppleScript失败，尝试使用open命令
+            if !success {
+                println!("macOS: AppleScript失败，尝试使用open命令...");
+                
+                // 尝试通过bundle identifier激活（如果应用是打包的）
+                match std::process::Command::new("open")
+                    .arg("-a")
+                    .arg("Water Reminder")
+                    .output() {
+                    Ok(output) => {
+                        if output.status.success() {
+                            println!("macOS: open命令成功激活应用");
+                            success = true;
+                        } else {
+                            println!("macOS: open命令失败: {}", String::from_utf8_lossy(&output.stderr));
+                        }
+                    },
+                    Err(e) => {
+                        println!("macOS: 无法执行open命令: {}", e);
+                    }
+                }
+            }
+            
+            // 方法3: 使用Accessibility API (需要权限)
+            if !success {
+                println!("macOS: 尝试使用Accessibility API...");
+                
+                let script = r#"
+                tell application "System Events"
+                    set frontApp to name of first application process whose frontmost is true
+                    set waterApp to first application process whose name contains "water" or name contains "Water"
+                    if waterApp exists then
+                        set frontmost of waterApp to true
+                        return true
+                    end if
+                    return false
+                end tell
+                "#;
+                
+                match std::process::Command::new("osascript")
+                    .arg("-e")
+                    .arg(script)
+                    .output() {
+                    Ok(output) => {
+                        if output.status.success() {
+                            let result = String::from_utf8_lossy(&output.stdout).trim();
+                            if result == "true" {
+                                println!("macOS: Accessibility API成功激活窗口");
+                                success = true;
+                            }
+                        }
+                    },
+                    Err(_) => {}
+                }
+            }
+            
+            if !success {
+                println!("macOS: 所有窗口激活方法都失败了");
+                println!("提示：确保应用程序正在运行，或检查辅助功能权限");
+            }
         }
     }
 

@@ -12,6 +12,10 @@ tokio = { version = "1.0", features = ["full"] }
 notify-rust = "4.11.7"
 dirs = "5.0"
 
+# Windows特定依赖
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "processthreadsapi", "handleapi", "tlhelp32", "stringapiset"] }
+
 [build-dependencies]
 slint-build = "1.8"
 
