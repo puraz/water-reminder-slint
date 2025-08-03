@@ -7,6 +7,7 @@ mod utils;
 
 use utils::data::DataManager;
 use utils::notification::NotificationManager;
+use utils::tray::{SystemTray, TrayMessage};
 
 slint::include_modules!();
 
@@ -33,6 +34,22 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     
     let ui = AppWindow::new()?;
+    
+    // 初始化系统托盘
+    let system_tray = SystemTray::new().expect("无法创建系统托盘");
+    
+    // 设置窗口关闭事件处理
+    {
+        let ui_weak = ui.as_weak();
+        ui.window().on_close_requested(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.hide().unwrap();
+                slint::CloseRequestResponse::KeepWindowShown
+            } else {
+                slint::CloseRequestResponse::HideWindow
+            }
+        });
+    }
     
     // 初始化UI状态
     {
@@ -363,6 +380,38 @@ fn main() -> Result<(), slint::PlatformError> {
             // 更新当前页面
             if let Some(ui) = ui_weak.upgrade() {
                 ui.global::<AppState>().set_current_page(page);
+            }
+        });
+    }
+    
+    // 设置托盘事件处理
+    {
+        let ui_weak = ui.as_weak();
+        let system_tray = std::rc::Rc::new(std::cell::RefCell::new(system_tray));
+        let tray_clone = system_tray.clone();
+        
+        // 使用定时器在主线程中检查托盘事件
+        let timer = slint::Timer::default();
+        timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(100), move || {
+            if let Ok(tray) = tray_clone.try_borrow() {
+                if let Some(message) = tray.handle_events() {
+                    match message {
+                        TrayMessage::Show => {
+                            if let Some(ui) = ui_weak.upgrade() {
+                                let _ = ui.show();
+                                let _ = ui.window().request_redraw();
+                            }
+                        },
+                        TrayMessage::Hide => {
+                            if let Some(ui) = ui_weak.upgrade() {
+                                let _ = ui.hide();
+                            }
+                        },
+                        TrayMessage::Quit => {
+                            std::process::exit(0);
+                        }
+                    }
+                }
             }
         });
     }
