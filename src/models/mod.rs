@@ -146,15 +146,15 @@ impl AppState {
     pub fn get_seven_days_data(&self) -> Vec<u32> {
         let mut seven_days = vec![0u32; 7];
         
-        // 获取过去6天的数据（如果有的话）
-        let available_days = std::cmp::min(self.weekly_stats.len(), 6);
-        for i in 0..available_days {
-            if let Some(stats) = self.weekly_stats.get(self.weekly_stats.len() - available_days + i) {
+        // weekly_stats现在总是包含6天的数据（包括没有记录的天），按日期升序排列
+        // 索引0对应6天前，索引5对应昨天
+        for (i, stats) in self.weekly_stats.iter().enumerate() {
+            if i < 6 {
                 seven_days[i] = stats.total_amount;
             }
         }
         
-        // 最后一天是今天
+        // 最后一天（索引6）是今天
         seven_days[6] = self.today_stats.total_amount;
         
         seven_days

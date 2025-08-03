@@ -67,9 +67,15 @@ impl DataManager {
         // 加载过去6天的数据（不包括今天）
         for i in 1..=6 {
             let date = today - chrono::Duration::days(i);
-            if let Some(stats) = self.load_daily_stats(date) {
-                weekly_stats.push(stats);
-            }
+            let stats = self.load_daily_stats(date)
+                .unwrap_or_else(|| DailyStats {
+                    date,
+                    total_amount: 0,
+                    goal_amount: settings.daily_goal,
+                    records: Vec::new(),
+                    goal_achieved: false,
+                });
+            weekly_stats.push(stats);
         }
         // 按日期排序，最旧的在前面
         weekly_stats.sort_by(|a, b| a.date.cmp(&b.date));
