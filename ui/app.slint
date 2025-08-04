@@ -58,8 +58,8 @@ export global AppState {
 component WaterButton inherits Rectangle {
     in property <int> amount;
     
-    width: 100px;
-    height: 55px;
+    width: 90px;
+    height: 45px;
     background: touch-area.has-hover ? #2ecc71 : (touch-area.pressed ? #2980b9 : #3498db);
     border-radius: 16px;
     drop-shadow-color: #00000020;
@@ -92,9 +92,9 @@ component AchievementBadge inherits Rectangle {
     in property <string> title;
     in property <string> description;
     
-    width: 130px;
+    width: 160px;
     height: 100px;
-    background: #f8f9fa;
+    background: #fff;
     border-radius: 15px;
     border-width: 2px;
     border-color: #e9ecef;
@@ -226,7 +226,7 @@ component NavBar inherits Rectangle {
 component HomePage inherits ScrollView {
     VerticalBox {
         spacing: 20px;
-        padding: 10px;
+        padding: 20px;
     
     // 今日进度卡片
     Rectangle {
@@ -506,39 +506,39 @@ component StatsPage inherits ScrollView {
         padding: 20px;
     
     // 今日统计卡片
-    Rectangle {
-        height: 120px;
-        background: #667eea;
-        border-radius: 15px;
-        drop-shadow-color: #00000020;
-        drop-shadow-blur: 10px;
-        drop-shadow-offset-y: 2px;
+    // Rectangle {
+    //     height: 120px;
+    //     background: #667eea;
+    //     border-radius: 15px;
+    //     drop-shadow-color: #00000020;
+    //     drop-shadow-blur: 10px;
+    //     drop-shadow-offset-y: 2px;
         
-        VerticalBox {
-            alignment: center;
-            spacing: 8px;
+    //     VerticalBox {
+    //         alignment: center;
+    //         spacing: 8px;
             
-            Text {
-                text: "今日进度";
-                color: white;
-                font-size: 16px;
-                font-weight: 600;
-            }
+    //         Text {
+    //             text: "今日进度";
+    //             color: white;
+    //             font-size: 16px;
+    //             font-weight: 600;
+    //         }
             
-            Text {
-                text: AppState.total-today + " / " + AppState.daily-goal + " ml";
-                color: white;
-                font-size: 20px;
-                font-weight: 700;
-            }
+    //         Text {
+    //             text: AppState.total-today + " / " + AppState.daily-goal + " ml";
+    //             color: white;
+    //             font-size: 20px;
+    //             font-weight: 700;
+    //         }
             
-            Text {
-                text: Math.round(AppState.progress-percentage) + "% 完成";
-                color: white;
-                font-size: 14px;
-            }
-        }
-    }
+    //         Text {
+    //             text: Math.round(AppState.progress-percentage) + "% 完成";
+    //             color: white;
+    //             font-size: 14px;
+    //         }
+    //     }
+    // }
     
     // 周统计卡片
     Rectangle {
