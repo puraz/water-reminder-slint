@@ -282,7 +282,7 @@ component HomePage inherits ScrollView {
     
     // 快速添加按钮
     VerticalBox {
-        spacing: 10px;
+        spacing: 8px;
         
         Text {
             text: "快速添加";
@@ -291,8 +291,8 @@ component HomePage inherits ScrollView {
             color: #2c3e50;
         }
         
-        VerticalBox {
-            spacing: 15px;
+        VerticalLayout {
+            spacing: 10px;
             
             HorizontalBox {
                 alignment: space-around;
@@ -317,10 +317,9 @@ component HomePage inherits ScrollView {
             alignment: center;
             
             Button {
-                text: "自定义量";
-                primary: true;
+                text: "自定义";
                 height: 45px;
-                width: 120px;
+                width: 80px;
                 clicked => {
                     AppState.show-custom-input-dialog();
                 }
@@ -337,7 +336,7 @@ component HomePage inherits ScrollView {
     
     // 今日记录或鼓励信息
     VerticalBox {
-        spacing: 10px;
+        spacing: 8px;
         
         Text {
             text: AppState.today-records.length > 0 ? "今日记录" : "今日状态";
@@ -646,7 +645,7 @@ component StatsPage inherits ScrollView {
     
     // 简化的7天趋势
     Rectangle {
-        height: 215px; // 增加高度以容纳更高的柱状图
+        height: 180px; // 增加高度以容纳更高的柱状图
         background: white;
         border-width: 2px;
         border-color: #e9ecef;
@@ -683,7 +682,7 @@ component StatsPage inherits ScrollView {
                         
                         Rectangle {
                             width: parent.width - 6px;
-                            height: AppState.seven-days-data[i] > 0 ? Math.max(5px, AppState.seven-days-data[i] * 70px / AppState.daily-goal) : 5px; // 调整最大高度
+                            height: AppState.seven-days-data[i] > 0 ? Math.min(Math.max(5px, AppState.seven-days-data[i] * 70px / AppState.daily-goal), 80px) : 5px; // 调整最大高度
                             background: i == 6 ? #667eea : (AppState.seven-days-data[i] >= AppState.daily-goal ? #4CAF50 : #3498db);
                             border-radius: 3px;
                         }
@@ -694,7 +693,7 @@ component StatsPage inherits ScrollView {
                                 // 假设数组最后一位(索引6)是今天，前面6位是过去6天
                                 // 需要根据今天是星期几来动态显示标签
                                 if i == 6 {
-                                    "今"
+                                    "今天"
                                 } else {
                                     // 简化处理：显示相对天数
                                     i == 0 ? "6天前" : i == 1 ? "5天前" : i == 2 ? "4天前" : 
@@ -709,12 +708,12 @@ component StatsPage inherits ScrollView {
                 }
             }
             
-            Text {
-                text: "\"今\"表示今日进度";
-                font-size: 12px;
-                color: #6c757d;
-                horizontal-alignment: center;
-            }
+            // Text {
+            //     text: "\"今\"表示今日进度";
+            //     font-size: 12px;
+            //     color: #6c757d;
+            //     horizontal-alignment: center;
+            // }
         }
     }
     
